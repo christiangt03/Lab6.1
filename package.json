@@ -1,0 +1,26 @@
+{
+  "name": "git-branch-tag-validator",
+  "version": "1.0.0",
+  "description": "GitHub Action to validate and normalize branch names and semver version tags.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build index.js -o dist --minify --no-source-map-register"
+  },
+  "keywords": [
+    "github",
+    "action",
+    "validation",
+    "branch",
+    "tag",
+    "semver",
+    "slug"
+  ],
+  "author": "Torres Garita, Christian Giovanny",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.1"
+  }
+}
