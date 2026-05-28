@@ -1,0 +1,249 @@
+
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset="utf-8">
+<title>Informe Técnico - Laboratorio 6</title>
+<style>
+body { font-family: Calibri, Arial, sans-serif; line-height: 1.6; color: #2C3E50; margin: 40px; }
+h1 { color: #5B2C6F; font-size: 26px; border-bottom: 2px solid #5B2C6F; padding-bottom: 8px; margin-top: 30px; }
+h2 { color: #34495E; font-size: 20px; margin-top: 25px; border-bottom: 1px solid #BDC3C7; padding-bottom: 4px; }
+h3 { color: #16A085; font-size: 15px; margin-top: 20px; }
+p { font-size: 11pt; margin-bottom: 12px; }
+code { font-family: Consolas, "Courier New", monospace; background-color: #F8F9F9; padding: 2px 5px; font-size: 10pt; border: 1px solid #E5E7E9; border-radius: 3px; }
+pre { background-color: #F8F9F9; border: 1px solid #BDC3C7; padding: 12px; font-family: Consolas, monospace; font-size: 9.5pt; margin-bottom: 15px; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; margin-bottom: 15px; }
+th, td { border: 1px solid #BDC3C7; padding: 10px; font-size: 10.5pt; text-align: left; }
+th { background-color: #EBEDEF; font-weight: bold; color: #2C3E50; }
+ul, ol { margin-top: 5px; margin-bottom: 15px; padding-left: 20px; }
+li { font-size: 11pt; margin-bottom: 5px; }
+a { color: #2980B9; text-decoration: none; }
+strong { font-weight: bold; color: #1B2631; }
+</style>
+</head>
+<body>
+  <h1>Informe Técnico — Laboratorio 6: Desarrollo de una Custom Action</h1>
+<p>&nbsp;</p>
+<p>Este documento constituye el informe técnico completo para el <strong>Laboratorio 6 — Desarrollo de una Custom Action</strong>, basado en el repositorio de GitHub <a href="https://github.com/christiangt03/Lab6.1">christiangt03/Lab6.1</a>. </p>
+<p>&nbsp;</p>
+<p>En este laboratorio se ha diseñado, codificado, compilado y estructurado una <strong>GitHub Custom Action en JavaScript</strong> enfocada en la gobernanza de ramas y versionado en flujos de Integración Continua (CI/CD). La acción valida las convenciones de nombres de ramas, sanitiza identificadores y valida y normaliza versiones usando la especificación <strong>Semantic Versioning (SemVer)</strong>.</p>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>📋 Resumen del Proyecto</h2>
+<p>&nbsp;</p>
+<p>Para dar cumplimiento a los requerimientos del equipo y maximizar la reutilización de código interno, se desarrolló la acción <strong>Git Branch & Tag Validator</strong>. Esta herramienta automatiza:</p>
+<ol>
+<li>La validación del formato de ramas en base a prefijos personalizables.</li>
+<li>La sanitización de nombres de ramas para generar identificadores seguros de sistemas externos (e.g. tags de Docker, nombres de subdominios, slugs de URLs).</li>
+<li>La extracción e inspección rigurosa de versiones basadas en el estándar SemVer 2.0.0.</li>
+<li>La gestión robusta ante valores nulos o inputs corruptos.</li>
+</ul>
+<p>&nbsp;</p>
+<p>A continuación se detalla la implementación y resolución de cada una de las partes de la guía de laboratorio.</p>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>🏛️ Parte 1 — Action Metadata (<code>action.yml</code>)</h2>
+<p>&nbsp;</p>
+<p>El archivo <a href="file:///c:/Users/chris/Lab4/action.yml">action.yml</a> define la interfaz pública de nuestra custom action. Los metadatos permiten a GitHub Actions interpretar los parámetros requeridos, las salidas producidas y el runtime bajo el cual debe ejecutarse la acción.</p>
+<p>&nbsp;</p>
+<h3>Estructura y Parámetros Definidos</h3>
+<p>&nbsp;</p>
+<pre><code>name: 'Git Branch &amp; Tag Validator'
+description: 'Validates Git branch naming conventions, generates safe slugs, parses SemVer versions, and structures outputs.'
+author: 'christiangt03'
+branding:
+  icon: 'git-branch'
+  color: 'purple'
+...
+</code></pre>
+<p>&nbsp;</p>
+<h3>1. Inputs (Entradas parametrizables)</h3>
+<p>Para evitar el hardcodeo de valores (Restricción 1), se parametrizó completamente el comportamiento de la acción:</p>
+<ul>
+<li><strong><code>branch-name</code></strong>: Nombre de la rama o etiqueta a procesar. Es opcional; si no se suministra, el backend de la acción la autodetecta del entorno.</li>
+<li><strong><code>allowed-prefixes</code></strong>: Lista de prefijos válidos separados por comas. Por defecto: <code>feat/,fix/,bugfix/,chore/,docs/,refactor/,release/,hotfix/</code>. Permite adaptar la acción a cualquier convención de Git Flow o Trunk Based Development.</li>
+<li><strong><code>version-prefix</code></strong>: Prefijo de las versiones (por defecto <code>v</code>), permitiendo procesar tanto <code>v1.0.0</code> como <code>1.0.0</code>.</li>
+<li><strong><code>fail-on-error</code></strong>: Booleano (<code>true</code>/<code>false</code>) que determina el comportamiento si el nombre es inválido. Si es <code>true</code>, interrumpe el pipeline inmediatamente.</li>
+</ul>
+<p>&nbsp;</p>
+<h3>2. Outputs (Salidas estructuradas y dinámicas)</h3>
+<p>Genera salidas dinámicas reutilizables en pasos subsiguientes del workflow (Requisito de la Parte 3 y Restricción 2):</p>
+<ul>
+<li><strong><code>is-valid</code></strong>: String <code>"true"</code> o <code>"false"</code> indicando si el nombre es apto.</li>
+<li><strong><code>branch-type</code></strong>: Categoría detectada (e.g., <code>feat</code>, <code>fix</code>, <code>release</code>, <code>mainline</code> u <code>unknown</code>).</li>
+<li><strong><code>safe-slug</code></strong>: String sanitizado para usos seguros en infraestructura.</li>
+<li><strong><code>extracted-version</code></strong>: La versión SemVer limpia (e.g., <code>1.4.2-beta.1</code>), o <code>N/A</code> si no procede.</li>
+<li><strong><code>validation-message</code></strong>: Detalle en lenguaje humano del resultado de la validación.</li>
+</ul>
+<p>&nbsp;</p>
+<h3>3. Runs (Runtime de Ejecución)</h3>
+<p>Declarado bajo <strong><code>node20</code></strong> (cumpliendo con la dificultad de runtime recomendada y moderna):</p>
+<pre><code>runs:
+  using: 'node20'
+  main: 'dist/index.js'
+</code></pre>
+<p>*Nota: Se ejecuta sobre <code>dist/index.js</code>, el cual es el compilado autocontenido (Zero-Dependencies) generado mediante <code>@vercel/ncc</code>.*</p>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>⚙️ Parte 2 — Lógica de la Acción (<code>index.js</code>)</h2>
+<p>&nbsp;</p>
+<p>La lógica está escrita en JavaScript puro bajo Node.js (<a href="file:///c:/Users/chris/Lab4/index.js">index.js</a>). Su implementación incluye algoritmos específicos para validar, normalizar y extraer información:</p>
+<p>&nbsp;</p>
+<h3>1. Normalización y Generación del "Safe Slug"</h3>
+<p>Para garantizar que el nombre de la rama pueda emplearse directamente en nombres de imágenes de Docker, kubernetes namespaces o URLs, se aplica la siguiente transformación:</p>
+<pre><code>let safeSlug = branchName
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, '-') // Reemplaza todo lo que no sea alfanumérico por guión (-)
+  .replace(/-+/g, '-')        // Contrae guiones duplicados ('---' -&gt; '-')
+  .replace(/^-|-$/g, '');     // Remueve guiones iniciales o finales
+</code></pre>
+<p>&nbsp;</p>
+<h3>2. Parseo y Validación de Semantic Versioning (SemVer)</h3>
+<p>Se implementó una expresión regular basada en el estándar oficial de <strong>SemVer 2.0.0</strong> para extraer y validar versiones de forma estricta. Si la rama es un release (e.g., <code>release/v2.0.4-rc.1</code>) o una etiqueta, se procesa la última sección:</p>
+<pre><code>const semVerRegexStr = `^(?:${escapeRegExp(versionPrefix)})?(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$`;
+const semVerRegex = new RegExp(semVerRegexStr);
+</code></pre>
+<p>Esta expresión valida y captura los 5 componentes principales de SemVer: <strong>Major</strong>, <strong>Minor</strong>, <strong>Patch</strong>, <strong>Prerelease</strong> y <strong>Build Metadata</strong>, reconstruyendo una cadena limpia y validada en el output <code>extracted-version</code>.</p>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>🔄 Parte 3 — Consumo de Outputs desde el Workflow</h2>
+<p>&nbsp;</p>
+<p>Los outputs dinámicos generados por la Custom Action son consumidos en cascada por pasos posteriores del workflow del pipeline. Esto se implementó y validó en el workflow de pruebas <a href="file:///c:/Users/chris/Lab4/.github/workflows/test-action.yml">test-action.yml</a>.</p>
+<p>&nbsp;</p>
+<h3>Consumo de Outputs en Yaml</h3>
+<p>Para invocar la acción y recuperar sus salidas estructuradas, se asigna un identificador (<code>id</code>) al paso que ejecuta la acción. Posteriormente, se accede a ellas utilizando el contexto <code>${{ steps.<id>.outputs.<nombre_del_output> }}</code>:</p>
+<p>&nbsp;</p>
+<pre><code>      # 1. Invocación de la acción
+      - name: Run Branch Validator
+        id: validator
+        uses: ./  # Ruta local en el repositorio de la Custom Action
+        with:
+          branch-name: 'release/v1.4.2-beta.1'
+          allowed-prefixes: 'feat/,fix/,chore/,release/'
+          version-prefix: 'v'
+          fail-on-error: 'false'
+
+      # 2. Consumo en pasos posteriores
+      - name: Deploy Image using Outputs
+        run: |
+          echo "La rama es válida?: ${{ steps.validator.outputs.is-valid }}"
+          echo "Tipo de rama: ${{ steps.validator.outputs.branch-type }}"
+          echo "Nombre seguro para Docker: ${{ steps.validator.outputs.safe-slug }}"
+          echo "Versión de release limpia: ${{ steps.validator.outputs.extracted-version }}"
+</code></pre>
+<p>&nbsp;</p>
+<h3>Utilidad Práctica</h3>
+<p>Este flujo permite automatizaciones avanzadas tales como:</p>
+<ul>
+<li><strong>Despliegues Condicionales</strong>: Ejecutar el despliegue a producción solo si <code>${{ steps.validator.outputs.branch-type == 'release' }}</code> y <code>${{ steps.validator.outputs.is-valid == 'true' }}</code>.</li>
+<li><strong>Tagging de Imágenes</strong>: Etiquetar dinámicamente imágenes Docker usando <code>${{ steps.validator.outputs.safe-slug }}</code> o <code>${{ steps.validator.outputs.extracted-version }}</code>.</li>
+</ul>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>🏷️ Parte 4 — Estrategia de Versionado y Consumo Remoto</h2>
+<p>&nbsp;</p>
+<p>El versionado correcto de una GitHub Action es fundamental para la estabilidad de los repositorios consumidores. Se diseñó una estrategia integral basada en buenas prácticas de GitHub:</p>
+<p>&nbsp;</p>
+<h3>1. Flujo de Publicación de Tags y Releases</h3>
+<p>La estrategia de versionado se compone de tres niveles complementarios:</p>
+<p>&nbsp;</p>
+<pre><code>graph TD
+    A[Commits en main] --&gt;|1. Crear Tag SemVer Completo| B(v1.0.0)
+    B --&gt;|2. Crear GitHub Release| C[Release v1.0.0 en GitHub]
+    B --&gt;|3. Actualizar Tag Mayor| D(v1)
+    D --&gt;|4. Consumo en otro repo| E[uses: christiangt03/Lab6.1@v1]
+</code></pre>
+<p>&nbsp;</p>
+<ol>
+<li><strong>Tag SemVer Completo (Parche)</strong>: Cada cambio estable se etiqueta con un tag semántico de tres partes (e.g., <code>v1.0.0</code>).</li>
+<li><strong>Tag de Versión Mayor (Major Tag)</strong>: Se mantiene un tag dinámico que representa la versión mayor (e.g., <code>v1</code>). Este tag se mueve mediante Git para apuntar siempre al último commit de la versión estable <code>v1.x.x</code> correspondiente:</li>
+<pre><code>   git tag -fa v1 -m "Actualizar versión mayor v1"
+   git push origin v1 --force
+</code></pre>
+<li><strong>GitHub Release</strong>: Se publica una "Release" formal en la interfaz de GitHub basada en el tag <code>v1.0.0</code>, documentando el registro de cambios (Changelog).</li>
+</ul>
+<p>&nbsp;</p>
+<h3>2. Consumo desde Otro Repositorio</h3>
+<p>Cualquier otro repositorio de la organización o público puede consumir esta Custom Action haciendo referencia al repositorio original de forma remota:</p>
+<p>&nbsp;</p>
+<ul>
+<li><strong>Consumo Dinámico (Recomendado)</strong>: Se suscribe a actualizaciones de parches sin romper la retrocompatibilidad.</li>
+<pre><code>  uses: christiangt03/Lab6.1@v1
+</code></pre>
+<li><strong>Consumo Estricto</strong>: Para fijar una versión inmutable e hiper-segura en producción.</li>
+<pre><code>  uses: christiangt03/Lab6.1@v1.0.0
+</code></pre>
+</ul>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>🛡️ Parte 5 — Robustez y Gestión de Errores</h2>
+<p>&nbsp;</p>
+<p>Para garantizar un funcionamiento fiable ante contingencias en los pipelines, se programaron múltiples mecanismos de seguridad en <a href="file:///c:/Users/chris/Lab4/index.js">index.js</a>:</p>
+<p>&nbsp;</p>
+<h3>1. Gestión de Inputs Vacíos o Nulos</h3>
+<p>Si el input <code>branch-name</code> es nulo o vacío (espacios en blanco), el script no crasheará. En su lugar, aplica una estrategia de recuperación progresiva (Fallback):</p>
+<ul>
+<li>Primero intenta recuperar <code>process.env.GITHUB_REF_NAME</code> (la rama corta proporcionada por el runner de GitHub, ej. <code>feat/auth</code>).</li>
+<li>Si no está disponible, intenta extraer la rama/etiqueta analizando la variable de entorno <code>process.env.GITHUB_REF</code> (removiendo el prefijo <code>refs/heads/</code> o <code>refs/tags/</code>).</li>
+<li>Si ninguna variable de entorno está presente (ej. ejecución en entorno de pruebas local aislado), el script <strong>captura el error controladamente</strong> y lanza un mensaje descriptivo orientando al desarrollador sobre cómo solucionarlo.</li>
+</ul>
+<p>&nbsp;</p>
+<h3>2. Control de Fallos con <code>fail-on-error</code></h3>
+<p>El desarrollador puede desear que un nombre de rama inválido no detenga su compilación o por el contrario, que bloquee inmediatamente el paso del pipeline. Esto se maneja dinámicamente:</p>
+<ul>
+<li><strong><code>fail-on-error: false</code></strong> (Por defecto): La acción reporta los fallos de naming en las salidas (<code>is-valid: false</code>), pero el workflow continúa ejecutándose.</li>
+<li><strong><code>fail-on-error: true</code></strong>: La acción ejecuta <code>core.setFailed()</code> interrumpiendo el flujo del CI de GitHub con un código de salida <code>1</code> y marcando el paso en rojo con el error preciso.</li>
+</ul>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>📊 Validación de Requisitos y Restricciones</h2>
+<p>&nbsp;</p>
+<table>
+  <tr>
+    <th>Requisito / Restricción</th>
+    <th>Estado</th>
+    <th>Implementación / Evidencia</th>
+  </tr>
+  <tr>
+    <td><strong>No Hardcodear valores</strong></td>
+    <td><strong>Cumplido</strong></td>
+    <td>Todos los parámetros se obtienen a través de <code>core.getInput()</code> con valores por defecto configurables en <code>action.yml</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>Al menos un output dinámico</strong></td>
+    <td><strong>Cumplido</strong></td>
+    <td>La acción genera múltiples outputs dinámicos calculados en tiempo de ejecución: <code>is-valid</code>, <code>safe-slug</code> y <code>extracted-version</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>Reutilización en otros repos</strong></td>
+    <td><strong>Cumplido</strong></td>
+    <td>La acción se compila con NCC a <code>dist/index.js</code>. Al subirse a GitHub, es accesible de forma remota mediante <code>christiangt03/Lab6.1@v1</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>Manejo del Runtime Node</strong></td>
+    <td><strong>Cumplido</strong></td>
+    <td>Declarado bajo <code>node20</code> en <code>action.yml</code> y empaquetado libre de dependencias nativas para una ejecución veloz en runners de Linux, Windows o macOS.</td>
+  </tr>
+</table>
+<p>&nbsp;</p>
+<hr style="border: 0; border-top: 1px solid #D5D8DC; margin: 20px 0;" />
+<p>&nbsp;</p>
+<h2>🏁 Conclusión</h2>
+<p>&nbsp;</p>
+<p>El Laboratorio 6 demuestra cómo empaquetar lógica empresarial común en una Custom Action de JavaScript. Al desacoplar la lógica de validación de nombres de ramas y normalización de SemVer del archivo YAML de configuración del pipeline, se logra:</p>
+<ul>
+<li><strong>Reducir la duplicación de código</strong> en múltiples repositorios.</li>
+<li><strong>Estandarizar las políticas de desarrollo</strong> a nivel organizacional.</li>
+<li><strong>Facilitar el mantenimiento</strong>, ya que corregir un bug o agregar un nuevo prefijo a la gobernanza se realiza en un único repositorio (<code>Lab6.1</code>), actualizándose de forma transparente para los consumidores a través de la etiqueta <code>@v1</code>.</li>
+</ul>
+<p>&nbsp;</p>
+
+</body>
+</html>
+  
