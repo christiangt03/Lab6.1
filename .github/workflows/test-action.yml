@@ -1,0 +1,100 @@
+name: 'Test Custom Action CI'
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-validator:
+    runs-on: ubuntu-latest
+    name: Validate Branch & Version Naming Cases
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Caso 1: Validar una rama de Feature correcta (Caso Positivo)
+      - name: Test Feature Branch (Valid)
+        id: test_feat
+        uses: ./
+        with:
+          branch-name: 'feat/user-auth-system'
+          allowed-prefixes: 'feat/,fix/,bugfix/,chore/,release/'
+          fail-on-error: 'false'
+
+      - name: Print Feature Outputs
+        run: |
+          echo "Is Valid: ${{ steps.test_feat.outputs.is-valid }}"
+          echo "Branch Type: ${{ steps.test_feat.outputs.branch-type }}"
+          echo "Safe Slug: ${{ steps.test_feat.outputs.safe-slug }}"
+          echo "Extracted Version: ${{ steps.test_feat.outputs.extracted-version }}"
+          echo "Validation Message: ${{ steps.test_feat.outputs.validation-message }}"
+
+      # Caso 2: Validar una rama de Release con SemVer (Caso SemVer)
+      - name: Test Release Branch with SemVer (Valid)
+        id: test_release
+        uses: ./
+        with:
+          branch-name: 'release/v1.4.2-beta.1'
+          allowed-prefixes: 'feat/,fix/,bugfix/,chore/,release/'
+          version-prefix: 'v'
+          fail-on-error: 'false'
+
+      - name: Print Release Outputs
+        run: |
+          echo "Is Valid: ${{ steps.test_release.outputs.is-valid }}"
+          echo "Branch Type: ${{ steps.test_release.outputs.branch-type }}"
+          echo "Safe Slug: ${{ steps.test_release.outputs.safe-slug }}"
+          echo "Extracted Version: ${{ steps.test_release.outputs.extracted-version }}"
+          echo "Validation Message: ${{ steps.test_release.outputs.validation-message }}"
+
+      # Caso 3: Validar una rama Inválida con fail-on-error desactivado (Caso Negativo Tolerante)
+      - name: Test Invalid Branch Naming (Fail Disabled)
+        id: test_invalid_tolerant
+        uses: ./
+        with:
+          branch-name: 'wrong-prefix-branch'
+          allowed-prefixes: 'feat/,fix/,bugfix/,release/'
+          fail-on-error: 'false'
+
+      - name: Print Invalid Branch Outputs
+        run: |
+          echo "Is Valid: ${{ steps.test_invalid_tolerant.outputs.is-valid }}"
+          echo "Branch Type: ${{ steps.test_invalid_tolerant.outputs.branch-type }}"
+          echo "Safe Slug: ${{ steps.test_invalid_tolerant.outputs.safe-slug }}"
+          echo "Extracted Version: ${{ steps.test_invalid_tolerant.outputs.extracted-version }}"
+          echo "Validation Message: ${{ steps.test_invalid_tolerant.outputs.validation-message }}"
+
+      # Caso 4: Validar una rama Inválida con fail-on-error activado (Caso de Fallo Controlado)
+      # Usamos continue-on-error: true para que el workflow no falle del todo y podamos validar que falló controladamente
+      - name: Test Invalid Branch Naming (Fail Enabled)
+        id: test_invalid_strict
+        uses: ./
+        with:
+          branch-name: 'unsupported/new-login'
+          allowed-prefixes: 'feat/,fix/,release/'
+          fail-on-error: 'true'
+        continue-on-error: true
+
+      - name: Verify Strict Mode Fail
+        run: |
+          echo "La acción estricta falló como se esperaba."
+
+      # Caso 5: Autodetección de la rama del Workflow actual (Caso Automático)
+      - name: Test Automatic Branch Detection
+        id: test_auto
+        uses: ./
+        with:
+          fail-on-error: 'false'
+
+      - name: Print Auto Detection Outputs
+        run: |
+          echo "Is Valid: ${{ steps.test_auto.outputs.is-valid }}"
+          echo "Branch Type: ${{ steps.test_auto.outputs.branch-type }}"
+          echo "Safe Slug: ${{ steps.test_auto.outputs.safe-slug }}"
+          echo "Extracted Version: ${{ steps.test_auto.outputs.extracted-version }}"
+          echo "Validation Message: ${{ steps.test_auto.outputs.validation-message }}"
